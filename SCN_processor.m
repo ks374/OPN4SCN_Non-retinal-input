@@ -10,6 +10,7 @@ classdef SCN_processor
             'P60_Het_A','P60_Het_B','P60_Het_C',...
             'P60_KO_A','P60_KO_B','P60_KO_C'
             }
+        Neuropil_area double;
     end
     
     methods
@@ -24,6 +25,7 @@ classdef SCN_processor
             [obj.Base_folder '8181_P60_KO_A\'],[obj.Base_folder '8261_P60_KO_B\'],...
             [obj.Base_folder '8262_P60_KO_C\']
             };
+            obj.Neuropil_area = zeros(12,1);
         end
 
         function [Height,Width,num_images] = get_stack_info(obj,i)
@@ -48,13 +50,34 @@ classdef SCN_processor
                 end
             end
         end
-
+        function image_stack = get_neuropil_images(obj,i)
+            [Height,Width,num_images] = obj.get_stack_info(i);
+            exp_folder = obj.Experiment_folders{i};
+            exp_folder = [exp_folder 'analysis\Result\1_soma\'];
+            files = dir([exp_folder '*.tif']);
+            image_stack = zeros(Height,Width,num_images);
+            parfor j =1:numel(files)
+                image_stack(:,:,j) = imread([files(j).folder '\' files(j).name]);
+            end
+        end
+        function Volume = get_neuropil_area(obj,i)
+            image_stack = obj.get_neuropil_images(i);
+            Volume =numel(find(image_stack(:)));
+            Volume = Volume * 0.0155*0.0155*0.07;
+        end
+        function obj = get_all_neuropil_area(obj)
+            for i = 1:12
+                obj.Neuropil_area(i) = obj.get_neuropil_area(i);
+            end
+        end
+%Experiment 2a1--------------------------------------------------------------
         function Projected_image_check(obj,matname,outpath)
             %Render retinal and non-retinal in the first 10 slices 
             %Z-projected imagesfor all samples. 
             %matname 1 for non-retinal and 2 for retinal. 
             for i = 1:12
                 disp(i);
+                [~,~,num_images] = obj.get_stack_info(i);
                 target_path = [obj.Experiment_folders{i} 'analysis\Result\'];
                 Gfile = [target_path '5_V_Syn\G_paired_3.mat'];
                 Rfile = [target_path '5_V_Syn\R_paired_3.mat'];
@@ -69,8 +92,8 @@ classdef SCN_processor
                 end
                 Image_G = obj.image_render(i,statsG);
                 Image_R = obj.image_render(i,statsR);
-                Image_G = Image_G(:,:,1:10);
-                Image_R = Image_R(:,:,1:10);
+                Image_G = Image_G(:,:,1:num_images);
+                Image_R = Image_R(:,:,1:num_images);
                 Image_G = max(Image_G,[],3);
                 Image_R = max(Image_R,[],3);
                 Image_B = zeros(size(Image_G,1),size(Image_G,2),size(Image_G,3),'uint8');
@@ -78,6 +101,109 @@ classdef SCN_processor
                 imwrite(Image_combine,[outpath obj.Experiment_name{i} '.tif']);
             end
         end
+        function den = get_nonret_density(obj,i,IsBassoon)
+            %IsBassoon or Homer123
+            stats = obj.get_stats(o,0,IsBassoon);
+            Total_volume = obj.Neuropil_area(i);
+            den = numel(stats) / Total_volume;
+        end
+        function den = get_ret_density(obj,i,IsBassoon)
+            %IsBassoon or Homer123
+            stats = obj.get_stats(i,1,IsBassoon);
+            Total_volume = obj.get_neuropil_area(i);
+            den = numel(stats) / Total_volume;
+        end
+        function get_all_non_ret_den(obj,outpath)
+            Headline = ["Name","Type","Channel","Density"];
+            writematrix(Headline,[outpath 'data.csv'],"WriteMode","append");
+            for i = 1:12
+                den_B = obj.get_nonret_density(i,1);
+                den_H = obj.get_nonret_density(i,0);
+                name = obj.Experiment_name{i};
+                line_temp = [string(name) "Nonret" "Bassoon" string(num2str(den_B))];
+                writematrix(line_temp,[outpath 'data.csv'],"WriteMode","append");
+                line_temp = [name "Nonret" "Homer" num2str(den_H)];
+                writematrix(line_temp,[outpath 'data.csv'],"WriteMode","append");
+
+                den_B = obj.get_ret_density(i,1);
+                den_H = obj.get_ret_density(i,0);
+                name = obj.Experiment_name{i};
+                line_temp = [string(name) "Ret" "Bassoon" string(num2str(den_B))];
+                writematrix(line_temp,[outpath 'data.csv'],"WriteMode","append");
+                line_temp = [string(name) "Ret" "Homer" string(num2str(den_H))];
+                writematrix(line_temp,[outpath 'data.csv'],"WriteMode","append");
+            end
+        end
+        function get_all_VGLuT2_den(obj,outpath)
+            Headline = ["Name","Type","Channel","Density"];
+            writematrix(Headline,[outpath 'data_Vglut2.csv'],"WriteMode","append");
+            for i = 1:12
+                den_V = obj.get_ret_density(i,2);
+                name = obj.Experiment_name{i};
+                line_temp = [string(name) "Ret" "VGluT2" string(num2str(den_V))];
+                writematrix(line_temp,[outpath 'data_Vglut2.csv'],"WriteMode","append");
+            end
+        end
+%Experiment 2a2-----------------------------------------------------------
+function center_point = find_center(obj,i)
+    [Height,Width,num_images] = obj.get_stack_info(i);
+    center_point = ceil([Height/2,Width/2,num_images/2]);
+end
+function stats = get_stats(obj,i,Is_ret,IsBassoon)
+    if Is_ret == 0
+        target_path = [obj.Experiment_folders{i} 'analysis\Result\5_V_Syn\'];
+        if IsBassoon == 1
+            mat_file = [target_path 'G_paired_3.mat'];
+            load(mat_file,"statsGwater_sssn");
+            stats = statsGwater_sssn; 
+        elseif IsBassoon == 0
+            mat_file = [target_path 'R_paired_3.mat'];
+            load(mat_file,"statsRwater_sssn");
+            stats = statsRwater_sssn; 
+        end
+    elseif Is_ret == 1
+        target_path = [obj.Experiment_folders{i} 'analysis\Result\5_V_Syn\'];
+        if IsBassoon == 1
+            mat_file = [target_path 'G_paired_3.mat'];
+            load(mat_file,"statsGwater_ssss");
+            stats = statsGwater_ssss; 
+        elseif IsBassoon == 0
+            mat_file = [target_path 'R_paired_3.mat'];
+            load(mat_file,"statsRwater_ssss");
+            stats = statsRwater_ssss; 
+        elseif IsBassoon == 2
+            target_path = [obj.Experiment_folders{i} 'analysis\Result\3_Vglut2\'];
+            mat_file = [target_path 'V_paired.mat'];
+            load(mat_file,"statsVwater_ss");
+            stats = statsVwater_ss; 
+        end
+    end
+end
+function WC_list = get_WeightedCentroids(obj,i,Is_ret,IsBassoon)
+    stats = obj.get_stats(i,Is_ret,IsBassoon);
+    WC_list = [];
+    for j = 1:numel(stats)
+        WC_list = cat(1,WC_list,stats(j).WeightedCentroid);
+    end
+end
+function Vector = vector_calc(~,point,points)
+    Dist_matrix = points-point;
+    Vector = sum(Dist_matrix);
+end
+function Vector = get_Vector_from_stats(obj,i,center_point,Is_ret,IsBassoon)
+    %center_point = [x,y,z];
+    WC_list = obj.get_WeightedCentroids(i,Is_ret,IsBassoon);
+    Vector = obj.vector_calc(center_point,WC_list);
+    Vector = Vector./numel(size(WC_list,1));
+end
+function vectors = batch_experiment2a2_1(obj,Is_ret,IsBassoon)
+    vectors = [];
+    for i = 1:12
+        center_point = obj.find_center(i);
+        vector = obj.get_Vector_from_stats(i,center_point,Is_ret,IsBassoon);
+        vectors = cat(1,vectors,vector);
+    end
+end
     end
 end
 
