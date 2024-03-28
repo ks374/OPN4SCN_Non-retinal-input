@@ -8,8 +8,12 @@ classdef SCN_processor
             'P8_Het_A','P8_Het_B','P8_Het_C',...
             'P8_KO_A','P8_KO_B','P8_KO_C',...
             'P60_Het_A','P60_Het_B','P60_Het_C',...
-            'P60_KO_A','P60_KO_B','P60_KO_C'
-            }
+            'P60_KO_A','P60_KO_B','P60_KO_C'}
+        Write_name = {
+            'He_P8_A','He_P8_B','He_P8_C',...
+            'KO_P8_A','KO_P8_B','KO_P8_C',...
+            'He_60_A','He_60_B','He_60_C',...
+            'KO_60_A','KO_60_B','KO_60_C'}
         Neuropil_area double;
     end
     
@@ -60,6 +64,16 @@ classdef SCN_processor
                 image_stack(:,:,j) = imread([files(j).folder '\' files(j).name]);
             end
         end
+        function image_stack = get_BD_images(obj,i)
+            [Height,Width,num_images] = obj.get_stack_info(i);
+            exp_folder = obj.Experiment_folders{i};
+            exp_folder = [exp_folder 'analysis\Result\0_BD\'];
+            files = dir([exp_folder '*.tif']);
+            image_stack = zeros(Height,Width,num_images);
+            parfor j =1:numel(files)
+                image_stack(:,:,j) = imread([files(j).folder '\' files(j).name]);
+            end
+        end
         function Volume = get_neuropil_area(obj,i)
             image_stack = obj.get_neuropil_images(i);
             Volume =numel(find(image_stack(:)));
@@ -70,7 +84,39 @@ classdef SCN_processor
                 obj.Neuropil_area(i) = obj.get_neuropil_area(i);
             end
         end
-%Experiment 2a1--------------------------------------------------------------
+        function line = get_writing_list_parameters(obj,i,IsRet,IsBassoon,addition_string)
+            Name = obj.Write_name{i};
+            No_Sample = Name(1:5);
+            Genotype = Name(1:2);
+            Age = Name(4:5);
+            Sample = Name(7);
+            if IsRet == 1
+                Source = 'Retina';
+            elseif IsRet == 0
+                Source = 'Nonret';
+            end
+            if IsBassoon == 0
+                PType = 'Homer';
+            elseif IsBassoon == 1
+                PType = 'Bassoon';
+            elseif IsBassoon == 2
+                PType = 'VGluT2';
+            end
+            line = [string(Name),string(No_Sample),string(Genotype),...
+                string(Age),string(Sample),string(Source),string(PType)];
+            if nargin > 4
+                line = cat(2,line,addition_string);
+            end
+        end
+        function line = get_writing_list_headline(obj,append_colume_name)
+            Headline = ["Name","No_Sample","Genotype",...
+                    "Age","Sample","Source","ProteinType"];
+            if nargin > 1
+                line = cat(2,Headline,append_colume_name);
+            end
+        end
+
+%Experiment 2a--------------------------------------------------------------
         function Projected_image_check(obj,matname,outpath)
             %Render retinal and non-retinal in the first 10 slices 
             %Z-projected imagesfor all samples. 
@@ -144,10 +190,11 @@ classdef SCN_processor
                 writematrix(line_temp,[outpath 'data_Vglut2.csv'],"WriteMode","append");
             end
         end
-%Experiment 2a2-----------------------------------------------------------
+%Experiment 2b-----------------------------------------------------------
 function center_point = find_center(obj,i)
-    [Height,Width,num_images] = obj.get_stack_info(i);
-    center_point = ceil([Height/2,Width/2,num_images/2]);
+    Image_stack = obj.get_BD_images(i);
+    [y,x,z] = ind2sub(size(Image_stack),find(Image_stack));
+    center_point = mean([x,y,z]);
 end
 function stats = get_stats(obj,i,Is_ret,IsBassoon)
     if Is_ret == 0
@@ -194,14 +241,52 @@ function Vector = get_Vector_from_stats(obj,i,center_point,Is_ret,IsBassoon)
     %center_point = [x,y,z];
     WC_list = obj.get_WeightedCentroids(i,Is_ret,IsBassoon);
     Vector = obj.vector_calc(center_point,WC_list);
-    Vector = Vector./numel(size(WC_list,1));
+    Vector = Vector./size(WC_list,1);
 end
-function vectors = batch_experiment2a2_1(obj,Is_ret,IsBassoon)
+function vector = vector_normalize(~,vector_in,voxel)
+    vector = vector_in.*voxel;
+end
+function values = get_vectors_length(~,vectors)
+    values = zeros(size(vectors,1),1);
+    for i = 1:size(vectors,1)
+        values(i) = sqrt(vectors(i,:) * vectors(i,:)');
+    end
+end
+    
+function vectors = batch_experiment2b_1(obj,Is_ret,IsBassoon)
     vectors = [];
     for i = 1:12
         center_point = obj.find_center(i);
         vector = obj.get_Vector_from_stats(i,center_point,Is_ret,IsBassoon);
+        vector = obj.vector_normalize(vector,[0.0155,0.0155,0.07]);
         vectors = cat(1,vectors,vector);
+    end
+end
+%Experiment 2b2--------------------------------------------------------
+function WC_list = WC_generate_from_image_stack(~,image_stack,num_stats)
+    [y,x,z] = ind2sub(size(image_stack),find(image_stack));
+    WC_list = datasample([x,y,z],num_stats,'Replace',false);
+end
+function WC_list = generate_randomization_once(obj,i,Is_ret,IsBassoon)
+    stats = obj.get_stats(i,Is_ret,IsBassoon);
+    num_stats = numel(stats);
+    image_stack = obj.get_neuropil_images(i);
+    WC_list = obj.WC_generate_from_image_stack(image_stack,num_stats);
+end
+function experiment2b2_batch(obj,resample_size,Is_ret,IsBassoon,outfile)
+    line = obj.get_writing_list_headline("DataType");
+    writematrix(line,outfile);
+    for i =1:12
+        center_point = obj.find_center(i);
+        for j = 1:resample_size   
+            WC_list = obj.generate_randomization_once(i,Is_ret,IsBassoon);
+            Vector = obj.vector_calc(center_point,WC_list);
+            Vector = Vector./size(WC_list,1);
+            Vector = obj.vector_normalize(Vector,[0.0155,0.0155,0.07]);
+            line = obj.get_writing_list_parameters(i,Is_ret,IsBassoon,"Rand");
+            line = cat(2,line,string(obj.get_vectors_length(Vector)));
+            writematrix(line,outfile,'WriteMode','append');
+        end
     end
 end
     end
