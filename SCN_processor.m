@@ -190,7 +190,7 @@ classdef SCN_processor
                 writematrix(line_temp,[outpath 'data_Vglut2.csv'],"WriteMode","append");
             end
         end
-%Experiment 2b-----------------------------------------------------------
+%Experiment 2b2-----------------------------------------------------------
 function center_point = find_center(obj,i)
     Image_stack = obj.get_BD_images(i);
     [y,x,z] = ind2sub(size(Image_stack),find(Image_stack));
@@ -244,25 +244,37 @@ function Vector = get_Vector_from_stats(obj,i,center_point,Is_ret,IsBassoon)
     Vector = Vector./size(WC_list,1);
 end
 function vector = vector_normalize(~,vector_in,voxel)
-    vector = vector_in.*voxel;
+    if size(vector_in,2) == 3
+        vector = vector_in.*voxel;
+    else
+        vector = vector_in(:,1:2).*voxel(1:2);
+    end
 end
 function values = get_vectors_length(~,vectors)
+    if size(vectors,2) == 3
+        vectors = vectors(:,1:2);
+    end
     values = zeros(size(vectors,1),1);
     for i = 1:size(vectors,1)
         values(i) = sqrt(vectors(i,:) * vectors(i,:)');
     end
 end
     
-function vectors = batch_experiment2b_1(obj,Is_ret,IsBassoon)
-    vectors = [];
+function batch_experiment2b_2(obj,Is_ret,IsBassoon,outfile)
+    line = obj.get_writing_list_headline(["DataType","x","y","length"]);
+    writematrix(line,outfile);
     for i = 1:12
         center_point = obj.find_center(i);
         vector = obj.get_Vector_from_stats(i,center_point,Is_ret,IsBassoon);
         vector = obj.vector_normalize(vector,[0.0155,0.0155,0.07]);
-        vectors = cat(1,vectors,vector);
+        line = obj.get_writing_list_parameters(i,Is_ret,IsBassoon,"Orig");
+        line = cat(2,line,string(vector(1)));
+        line = cat(2,line,string(vector(2)));
+        line = cat(2,line,string(obj.get_vectors_length(vector)));
+        writematrix(line,outfile,'WriteMode','append');
     end
 end
-%Experiment 2b2--------------------------------------------------------
+%Experiment 2b2 ---------------------Rand data generation
 function WC_list = WC_generate_from_image_stack(~,image_stack,num_stats)
     [y,x,z] = ind2sub(size(image_stack),find(image_stack));
     WC_list = datasample([x,y,z],num_stats,'Replace',false);
@@ -274,8 +286,8 @@ function WC_list = generate_randomization_once(obj,i,Is_ret,IsBassoon)
     WC_list = obj.WC_generate_from_image_stack(image_stack,num_stats);
 end
 function experiment2b2_batch(obj,resample_size,Is_ret,IsBassoon,outfile)
-    line = obj.get_writing_list_headline("DataType");
-    writematrix(line,outfile);
+    %line = obj.get_writing_list_headline(["DataType","x","y","length"]);
+    %writematrix(line,outfile);
     for i =1:12
         center_point = obj.find_center(i);
         for j = 1:resample_size   
@@ -284,6 +296,8 @@ function experiment2b2_batch(obj,resample_size,Is_ret,IsBassoon,outfile)
             Vector = Vector./size(WC_list,1);
             Vector = obj.vector_normalize(Vector,[0.0155,0.0155,0.07]);
             line = obj.get_writing_list_parameters(i,Is_ret,IsBassoon,"Rand");
+            line = cat(2,line,string(Vector(1)));
+            line = cat(2,line,string(Vector(2)));
             line = cat(2,line,string(obj.get_vectors_length(Vector)));
             writematrix(line,outfile,'WriteMode','append');
         end
