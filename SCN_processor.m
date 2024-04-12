@@ -85,6 +85,9 @@ classdef SCN_processor
             end
         end
         function line = get_writing_list_parameters(obj,i,IsRet,IsBassoon,addition_string)
+            if nargin > 4
+                Adding = addition_string;
+            end
             Name = obj.Write_name{i};
             No_Sample = Name(1:5);
             Genotype = Name(1:2);
@@ -104,9 +107,7 @@ classdef SCN_processor
             end
             line = [string(Name),string(No_Sample),string(Genotype),...
                 string(Age),string(Sample),string(Source),string(PType)];
-            if nargin > 4
-                line = cat(2,line,addition_string);
-            end
+            line = cat(2,line,Adding);
         end
         function line = get_writing_list_headline(obj,append_colume_name)
             Headline = ["Name","No_Sample","Genotype",...
@@ -301,6 +302,40 @@ function experiment2b2_batch(obj,resample_size,Is_ret,IsBassoon,outfile)
             line = cat(2,line,string(Vector(1)));
             line = cat(2,line,string(Vector(2)));
             line = cat(2,line,string(obj.get_vectors_length(Vector)));
+            writematrix(line,outfile,'WriteMode','append');
+        end
+    end
+end
+%---------------------------------------------------------------------------
+%Experiment 2c
+function Property_out = get_Sample_Cluster_Property(obj,i,Is_ret,IsBassoon,type)
+    %Get volume('V') or signal density ('S') from stats.
+    stats = obj.get_stats(i,Is_ret,IsBassoon);
+    if type == 'V'
+        Property_out = [stats.Volume1_0];
+    elseif type == 'S'
+        V = [stats.Volume1_0];
+        I = [stats.TintsG];
+        Property_out = I./V;
+    end
+    if size(Property_out,1)~=1
+        Property_out = Property_out';
+    end
+end
+function batch_experiment_2c(obj,IsBassoon,outfile,type)
+    %IsBassoon = 1: Homer; IsBassoon = 0: Bassoon; IsBassoon = 2: VGluT2. 
+    %For Bassoon and Homer1, both ret and non-ret will be given. 
+    line = obj.get_writing_list_headline([]);
+    writematrix(line,outfile);
+    for i =1:12
+        line = obj.get_writing_list_parameters(i,1,IsBassoon,[]);
+        Property_out = obj.get_Sample_Cluster_Property(i,1,IsBassoon,type);
+        line = cat(2,line,string(Property_out));
+        writematrix(line,outfile,'WriteMode','append');
+        if IsBassoon ~= 2
+            line = obj.get_writing_list_parameters(i,0,IsBassoon,[]);
+            Property_out = obj.get_Sample_Cluster_Property(i,0,IsBassoon,type);
+            line = cat(2,line,string(Property_out));
             writematrix(line,outfile,'WriteMode','append');
         end
     end
