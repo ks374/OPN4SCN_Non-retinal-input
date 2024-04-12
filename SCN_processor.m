@@ -287,6 +287,8 @@ function WC_list = generate_randomization_once(obj,i,Is_ret,IsBassoon)
 end
 function experiment2b2_batch(obj,resample_size,Is_ret,IsBassoon,outfile)
     %line = obj.get_writing_list_headline(["DataType","x","y","length"]);
+    %Note: X and Y here represents vector pointing to canvas right and up,
+    %while FIJI points to right and down. 
     %writematrix(line,outfile);
     for i =1:12
         center_point = obj.find_center(i);
