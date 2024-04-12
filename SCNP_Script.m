@@ -18,3 +18,16 @@ SCNP.batch_experiment2b_2(1,2,outfile);
 clc;
 outfile = [inpath '20240227_Non_retinal_input_investigation\Experiment_2b2\Data.csv'];
 SCNP.experiment2b2_batch(10,1,2,outfile);
+%%
+clear;clc
+%Experiment 2b4; 
+inpath = 'Z:\Chenghang\OPN4SCN\';
+SCNP = SCN_processor(inpath);
+SCNP = SCNP.get_all_neuropil_area();
+outfile = [inpath '20240227_Non_retinal_input_investigation\Experiment_2b4\Data_nonret.csv'];
+SCNP.batch_experiment2b_2(0,1,outfile);
+%%
+SCNP.experiment2b2_batch(10,0,1,outfile);
+%%
+outfile = [inpath '20240227_Non_retinal_input_investigation\Experiment_2b4\Data_ret.csv'];
+SCNP.experiment2b2_batch(10,1,2,outfile);
